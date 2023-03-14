@@ -42,6 +42,7 @@ input.conf 示例：
  b                    script-binding input_plus/speed_auto          # [按住/松开] 两倍速/一倍速
 #                     script-binding input_plus/speed_auto_bullet   # [按住/松开] 子弹时间/一倍速
 #                     script-binding input_plus/speed_recover       # 仿Pot的速度重置与恢复
+#                     script-binding input_plus/speed_sync_toggle   # 启用/禁用自适应速度偏移（补偿显示刷新率）
 
 #                     script-binding input_plus/stats_1_2           # 单键浏览统计数据第1至2页
 #                     script-binding input_plus/stats_0_4           # 单键浏览统计数据第0至4页
@@ -463,6 +464,10 @@ function seek_skip(num)
 end
 
 local bak_speed = nil
+local spd_adapt = false
+local spd_iters_max = 10
+local spd_delta_max = 0.5
+local spd_delta_min = 0.0005
 function speed_auto(tab)
 	if tab.event == "down" then
 		mp.set_property_number("speed", 2)
@@ -490,6 +495,52 @@ function speed_recover()
 			bak_speed = 1
 		end
 		mp.command("set speed " .. bak_speed)
+	end
+end
+function speed_scale(rat, fact)
+	local spd_scale, spd_delta = nil, nil
+	for _, i in ipairs({fact, fact-1, fact+1}) do
+		spd_scale = rat * i / math.floor(i * rat + 0.5)
+		spd_delta = math.abs(spd_scale - 1)
+		if spd_delta < spd_delta_min then
+			mp.msg.info("speed_sync_toggle 目标速度为1")
+			return 1
+		elseif spd_delta <= spd_delta_max then
+			mp.msg.info("speed_sync_toggle 目标速度为" .. spd_scale)
+			return spd_scale
+		end
+	end
+end
+function speed_adaptive()
+	local fps_raw = mp.get_property_number("container-fps", 0)
+	local fps_vf = mp.get_property_number("estimated-vf-fps", 0)
+	local fps_dp = mp.get_property_number("display-fps", 0)
+	local spd_cur = mp.get_property_number("speed", 1)
+	if (fps_raw == 0 or fps_dp == 0 or fps_raw > 32 or math.abs(fps_vf - fps_raw) > 0.5) then
+		mp.msg.warn("speed_sync_toggle 存在例外的FPS情况")
+		return
+	end
+	for i = 1, spd_iters_max do
+		local spd_target = speed_scale(fps_dp / fps_raw, i)
+		if spd_target then
+			if math.abs(spd_target - spd_cur) < 0.0001 then
+				break
+			else
+				mp.set_property("speed", spd_target)
+				mp.msg.info("speed_sync_toggle 设定当前速度为" .. spd_target)
+				break
+			end
+		end
+	end
+end
+function speed_sync_toggle()
+	spd_adapt = not spd_adapt
+	if spd_adapt then
+		mp.osd_message("已启用速度自适应", 1)
+		speed_adaptive()
+	else
+		mp.osd_message("已禁用速度自适应", 1)
+		return
 	end
 end
 
@@ -536,6 +587,8 @@ mp.observe_property("chapter-metadata/TITLE", "string", chapter_change)
 
 mp.register_event("end-file", function() if marked_aid_A ~= nil or marked_aid_B ~= nil then mark_aid_reset() end end)
 
+mp.register_event("playback-restart", function() if spd_adapt then speed_adaptive() end end)
+
 
 --
 -- 键位绑定
@@ -580,6 +633,7 @@ mp.add_key_binding(nil, "seek_skip_next", function() seek_skip(1) end)
 mp.add_key_binding(nil, "speed_auto", speed_auto, {complex = true})
 mp.add_key_binding(nil, "speed_auto_bullet", speed_auto_bullet, {complex = true})
 mp.add_key_binding(nil, "speed_recover", speed_recover)
+mp.add_key_binding(nil, "speed_sync_toggle", speed_sync_toggle)
 
 mp.add_key_binding(nil, "stats_1_2", function() stats_cycle(1, 2) end)
 mp.add_key_binding(nil, "stats_0_4", function() stats_cycle(0, 4) end)
