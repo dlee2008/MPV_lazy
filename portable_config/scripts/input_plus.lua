@@ -57,7 +57,9 @@ input.conf 示例：
 #                     script-binding input_plus/trackS_refresh      # ...（字幕）
 #                     script-binding input_plus/trackV_refresh      # ...（视频）
 
---]]
+#                     script-message-to input_plus cycle-cmds "cmd1" "cmd2"   # 循环触发命令
+
+]]
 
 
 local utils = require("mp.utils")
@@ -147,6 +149,14 @@ function chapter_change(_, value)
 			mp.commandv("add", "chapter", 1)
 		end
 	end
+end
+
+local cmds_sqnum = {}
+local function cycle_cmds(...)
+	local cmds_list = {...}
+	local cur_cmd = table.concat(cmds_list, "|")
+	cmds_sqnum[cur_cmd] = (cmds_sqnum[cur_cmd] or 0) % #cmds_list + 1
+	mp.command(cmds_list[cmds_sqnum[cur_cmd]])
 end
 
 local osm = mp.create_osd_overlay("ass-events")
@@ -584,3 +594,5 @@ mp.add_key_binding(nil, "trackV_next", function() track_seek("vid", 1) end)
 mp.add_key_binding(nil, "trackA_refresh", function() track_refresh("aid") end)
 mp.add_key_binding(nil, "trackS_refresh", function() track_refresh("sid") end)
 mp.add_key_binding(nil, "trackV_refresh", function() track_refresh("vid") end)
+
+mp.register_script_message("cycle-cmds", cycle_cmds)
