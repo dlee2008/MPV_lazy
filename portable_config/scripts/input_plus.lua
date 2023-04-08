@@ -27,6 +27,8 @@ input.conf 示例：
 #                     script-binding input_plus/ostime_display      # 临时显示系统时间
 #                     script-binding input_plus/ostime_toggle       # 启用/禁用显示系统时间
 
+#                     script-binding input_plus/pip_dummy           # 画中画（伪）/小窗化
+
  Alt+p                script-binding input_plus/playlist_order_0    # 播放列表的洗牌与撤销
 #                     script-binding input_plus/playlist_order_0r   # ...（重定向至首个文件）
 #                     script-binding input_plus/playlist_order_1    # 播放列表连续洗牌（可用上两项命令恢复）
@@ -67,7 +69,7 @@ input.conf 示例：
 local utils = require("mp.utils")
 
 function check_plat()
-	if os.getenv("windir") ~= nil then
+	if mp.get_property_native("platform") == "windows" then
 		return "windows"
 	elseif string.sub((os.getenv("HOME")), 1, 6) == "/Users" then
 		return "macos"
@@ -77,6 +79,14 @@ function check_plat()
 	return "x11"
 end
 local plat = check_plat()
+
+function lock_prop(prop_c, type_c, value_c, prop_l, value_l)
+	mp.observe_property(prop_c, type_c, function(_, value)
+		if value == value_c then
+			mp.set_property(prop_l, value_l)
+		end
+	end)
+end
 
 
 
@@ -397,6 +407,30 @@ function ostime_display()
 end
 
 
+function pip_dummy()
+	if mp.get_property_native("idle-active") or not mp.get_property_native("vid") then
+		mp.msg.warn("pip_dummy 无法在当前状态使用")
+		return
+	end
+	local w_dp, h_dp = mp.get_property_number("display-width", 0), mp.get_property_number("display-height", 0)
+	local w_vf, h_vf = mp.get_property_number("dwidth", 0), mp.get_property_number("dheight", 0)
+	local scale_win = mp.get_property_number("current-window-scale", 0)
+	local scale_shift = mp.get_property_number("display-hidpi-scale", 1)
+	if w_dp == 0 or w_vf == 0 or scale_win == 0 then
+		mp.msg.warn("pip_dummy 缺乏必要条件")
+		return
+	end
+	local scale_target = tonumber(string.format("%.3f", math.sqrt((w_dp * h_dp * 0.10) / (w_vf * h_vf)) / scale_shift))
+	mp.set_property_bool("fullscreen", false)
+	mp.set_property_bool("border", false)
+	mp.set_property_number("current-window-scale", scale_target)
+	mp.set_property_bool("auto-window-resize", false)
+	mp.set_property_bool("keepaspect-window", false)
+	mp.set_property_bool("ontop", true)
+	mp.msg.info("pip_dummy 已尝试应用")
+end
+
+
 function show_playlist_shuffle()
 	mp.add_timeout(0.1, function()
 		local shuffle_msg = mp.command_native({"expand-text", "${playlist}"})
@@ -672,6 +706,8 @@ mp.add_key_binding(nil, "mark_aid_fin", mark_aid_fin)
 
 mp.add_key_binding(nil, "ostime_display", ostime_display)
 mp.add_key_binding(nil, "ostime_toggle", ostime_toggle)
+
+mp.add_key_binding(nil, "pip_dummy", pip_dummy)
 
 mp.add_key_binding(nil, "playlist_order_0", function() playlist_order(0) end)
 mp.add_key_binding(nil, "playlist_order_0r", function() playlist_order(0, true) end)

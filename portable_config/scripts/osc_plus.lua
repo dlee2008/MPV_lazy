@@ -18,7 +18,7 @@ if mp.get_property_native("osc") then
     if mouse_stat then
         mp.set_property("input-cursor", "no")
         mp.set_property("osc", "no")
-        mp.add_timeout(0.3, function() mp.set_property("input-cursor", "yes") end)
+        mp.add_timeout(0.5, function() mp.set_property("input-cursor", "yes") end)
     else
         mp.set_property("osc", "no")
     end
@@ -503,7 +503,7 @@ end
 function window_controls_enabled()
     val = user_opts.windowcontrols
     if val == "auto" then
-        return not state.border
+        return not state.border or state.fullscreen  -- 全屏时启用osc顶部控件
     else
         return val ~= "no"
     end
